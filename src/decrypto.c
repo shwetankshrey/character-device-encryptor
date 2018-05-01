@@ -7,6 +7,8 @@
 #include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
+#include <linux/random.h>
+#include <linux/slab.h>
 #include <asm/uaccess.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
@@ -17,18 +19,47 @@ static char *name = "Decryption-Device";
 static struct cdev c_dev;
 static struct class *cl;
 
+static unsigned char *decrypted_text;
+static unsigned char *key;
+
 static int de_open (struct inode *in, struct file *fl) {
     printk("Opening Decryption Device...\n");
     return 0;
 }
 
 static ssize_t de_read (struct file *fl, char __user *usr, size_t sz, loff_t *off) {
+    int i;
     printk("Reading from Decryption Device...\n");
-    return 0;
+    for(i = 0 ; i < 256 ; i++) {
+        printk("%s\n", decrypted_text);
+    }
+    copy_to_user( usr, &decrypted_text, i+1 );
+    return sz;
 }
 
 static ssize_t de_write (struct file *fl, const char __user *usr, size_t sz, loff_t *off) {
+    unsigned char *to_decrypt;
+    int i;
     printk("Writing to Decryption Device...\n");
+    to_decrypt = kmalloc(sizeof(char)*sz, GFP_KERNEL);
+    decrypted_text = kmalloc(sizeof(char)*256, GFP_KERNEL);
+    key = kmalloc(sizeof(char)*16, GFP_KERNEL);
+    if (copy_from_user(to_decrypt, usr, sz) != 0) {
+        return -EFAULT;
+    }
+    for(i = 0 ; i < 16 ; i++) {
+        key[i] = to_decrypt[i];
+    }
+    i = 0;
+    while (i < sz/16) {
+        int j = 0;
+        while( j < 16 ) {
+            decrypted_text[i*16+j] = key[j] ^ to_decrypt[(i+1)*16+j];
+            key[j] = to_decrypt[(i+1)*16+j];
+            j++;
+        }
+        i++;
+    }
     return sz;
 }
 
