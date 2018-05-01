@@ -1,1 +1,0 @@
-cmd_/home/tank/Desktop/character-device-encryptor/src/decrypto.ko := ld -r -m elf_x86_64 -T ./scripts/module-common.lds --build-id  -o /home/tank/Desktop/character-device-encryptor/src/decrypto.ko /home/tank/Desktop/character-device-encryptor/src/decrypto.o /home/tank/Desktop/character-device-encryptor/src/decrypto.mod.o
