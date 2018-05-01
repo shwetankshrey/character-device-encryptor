@@ -20,25 +20,17 @@ static struct cdev c_dev;
 static struct class *cl;
 
 static unsigned char *encrypted_text;
-static int number_blocks;
-static unsigned char *key;
 
 static int en_open (struct inode *in, struct file *fl) {
     printk("Opening Encryption Device...\n");
+    encrypted_text = kmalloc(sizeof(char)*256, GFP_KERNEL);
+    memset(encrypted_text, 0, sizeof(char)*256);
     return 0;
 }
 
 static ssize_t en_read (struct file *fl, char __user *usr, size_t sz, loff_t *off) {
-    int i;
     printk("Reading from Encryption Device...\n");
-    for(i = 0 ; i < number_blocks*16 ; i++) {
-        printk("%02x", encrypted_text[i]);
-        if(!encrypted_text[i]) {
-            break;
-        }
-    }
-    printk("\n");
-    if (copy_to_user( usr, &encrypted_text, i+1 ) != 0) {
+    if (copy_to_user( usr, (char *) encrypted_text, sz ) != 0) {
         return -EFAULT;
     }
     return sz;
@@ -46,11 +38,11 @@ static ssize_t en_read (struct file *fl, char __user *usr, size_t sz, loff_t *of
 
 static ssize_t en_write (struct file *fl, const char __user *usr, size_t sz, loff_t *off) {
     unsigned char *to_encrypt;
+    unsigned char *key;
     int i;
     printk("Writing to Encryption Device...\n");
-    number_blocks = (sz/16) + 2;
     to_encrypt = kmalloc(sizeof(char)*sz, GFP_KERNEL);
-    encrypted_text = kmalloc(sizeof(char)*(number_blocks*16), GFP_KERNEL);
+    memset(to_encrypt, 0, sizeof(char)*sz);
     key = kmalloc(sizeof(char)*16, GFP_KERNEL);
     if (copy_from_user(to_encrypt, usr, sz) != 0) {
         return -EFAULT;
@@ -60,25 +52,32 @@ static ssize_t en_write (struct file *fl, const char __user *usr, size_t sz, lof
         encrypted_text[i] = key[i];
     }
     i = 0;
-    while (i < number_blocks ) {
+    while (i < sz - 1) {
         int j = 0;
         while( j < 16 ) {
             if( i >= sz-1 ) {
-                encrypted_text[(i+1)*16+j] = key[j] ^ 0;
+                encrypted_text[i+16] = key[j] ^ 0;
             }
             else {
-                encrypted_text[(i+1)*16+j] = key[j] ^ to_encrypt[i*16+j];
+                encrypted_text[i+16] = key[j] ^ to_encrypt[i];
             }
-            key[j] = encrypted_text[(i+1)*16+j];
+            key[j] = encrypted_text[i+16];
             j++;
+            i++;
         }
+    }
+    while(i < 240) {
+        encrypted_text[i+16] = 0x00;
         i++;
     }
+    kfree(to_encrypt);
+    kfree(key);
     return sz;
 }
 
 static int en_close (struct inode *in, struct file *fl) {
     printk("Closing Encryption Device...\n");
+    kfree(encrypted_text);
     return 0;
 }
 

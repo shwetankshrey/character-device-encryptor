@@ -20,10 +20,11 @@ static struct cdev c_dev;
 static struct class *cl;
 
 static unsigned char *decrypted_text;
-static unsigned char *key;
 
 static int de_open (struct inode *in, struct file *fl) {
     printk("Opening Decryption Device...\n");
+    decrypted_text = kmalloc(sizeof(char)*256, GFP_KERNEL);
+    memset(decrypted_text, 0, sizeof(char)*256);
     return 0;
 }
 
@@ -31,27 +32,39 @@ static ssize_t de_read (struct file *fl, char __user *usr, size_t sz, loff_t *of
     int i;
     printk("Reading from Decryption Device...\n");
     for(i = 0 ; i < 256 ; i++) {
-        printk("%s\n", decrypted_text);
+        // printk("%02x", decrypted_text[i]);
+        if(decrypted_text[i] == 0x00) {
+            break;
+        }
     }
-    copy_to_user( usr, &decrypted_text, i+1 );
+    // printk("\n%s\n", decrypted_text);
+    if (copy_to_user( usr, (char *) decrypted_text, sz ) != 0) {
+        return -EFAULT;
+    }
     return sz;
 }
 
 static ssize_t de_write (struct file *fl, const char __user *usr, size_t sz, loff_t *off) {
     unsigned char *to_decrypt;
+    unsigned char *key;
+    char *tmp;
     int i;
     printk("Writing to Decryption Device...\n");
-    to_decrypt = kmalloc(sizeof(char)*sz, GFP_KERNEL);
-    decrypted_text = kmalloc(sizeof(char)*256, GFP_KERNEL);
+    to_decrypt = kmalloc(sizeof(char)*256, GFP_KERNEL);
+    tmp = kmalloc(sizeof(char)*256, GFP_KERNEL);
+    memset(to_decrypt, 0, sizeof(char)*256);
     key = kmalloc(sizeof(char)*16, GFP_KERNEL);
-    if (copy_from_user(to_decrypt, usr, sz) != 0) {
+    if (copy_from_user(tmp, usr, sz) != 0) {
         return -EFAULT;
+    }
+    for(i = 0 ; i < 256 ; i++) {
+        to_decrypt[i] = (unsigned char) tmp[i];
     }
     for(i = 0 ; i < 16 ; i++) {
         key[i] = to_decrypt[i];
     }
     i = 0;
-    while (i < sz/16) {
+    while (i < 16) {
         int j = 0;
         while( j < 16 ) {
             decrypted_text[i*16+j] = key[j] ^ to_decrypt[(i+1)*16+j];
@@ -60,11 +73,14 @@ static ssize_t de_write (struct file *fl, const char __user *usr, size_t sz, lof
         }
         i++;
     }
+    kfree(to_decrypt);
+    kfree(key);
     return sz;
 }
 
 static int de_close (struct inode *in, struct file *fl) {
     printk("Closing Decryption Device...\n");
+    kfree(decrypted_text);
     return 0;
 }
 
